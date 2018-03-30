@@ -1,4 +1,4 @@
-package com.golabe.utils;
+package com.golabe.common.utils;
 
 
 import android.os.Environment;

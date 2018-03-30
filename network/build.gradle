@@ -42,6 +42,8 @@ dependencies {
     implementation "io.reactivex:rxandroid:$rxandroid_version"
     implementation "io.reactivex:rxjava:$rxjava_version"
 
+    implementation project(":common")
+
 
 
 }

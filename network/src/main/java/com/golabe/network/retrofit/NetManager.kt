@@ -1,14 +1,16 @@
 package com.golabe.network.retrofit
 
-import com.golabe.app.AppConstant
-import com.golabe.network.interceptor.CacheInterceptor
-import com.golabe.utils.FileUtils
+import android.text.TextUtils
+import com.golabe.common.app.AppConstant
+import com.golabe.common.app.AppConstant.Companion.MAX_CACHE_TIME
+import com.golabe.common.app.LetgoApplcation
+import com.golabe.common.utils.FileUtils
+import com.golabe.common.utils.NetworkUtils
 import okhttp3.*
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
 import retrofit2.adapter.rxjava.RxJavaCallAdapterFactory
 import retrofit2.converter.gson.GsonConverterFactory
-import java.util.ArrayList
 import java.util.concurrent.TimeUnit
 
 class NetManager private constructor() {
@@ -32,35 +34,44 @@ class NetManager private constructor() {
     }
 
 
-    private fun createOkHttpClient(): OkHttpClient {
-        val cacheFolder = FileUtils.getInstance().cacheFolder
-        val cache = Cache(cacheFolder, 1024 * 1024 * 100)
-        return OkHttpClient.Builder()
-                .addInterceptor(HttpLoggingInterceptor().setLevel(HttpLoggingInterceptor.Level.BODY))
-                .addInterceptor(CacheInterceptor())
-                .cache(cache).addInterceptor(object :Interceptor{
-                    override fun intercept(chain: Interceptor.Chain?): Response {
+    private fun createOkHttpClient(): OkHttpClient =
+            OkHttpClient.Builder().apply {
+                readTimeout(10, TimeUnit.SECONDS)
+                writeTimeout(10, TimeUnit.SECONDS)
+                connectTimeout(10, TimeUnit.SECONDS)
+                addInterceptor(HttpLoggingInterceptor().setLevel(HttpLoggingInterceptor.Level.BODY))
+
+                addInterceptor { chain ->
+                    var request = chain.request()
+                    val method = request.method()
+
+                    if (method == "GET") request.newBuilder().header("Cache-Control", " public, max-age=$MAX_CACHE_TIME")
+
+                    var cacheControl = request.cacheControl().toString()
+                    if (!NetworkUtils.isNetwork(LetgoApplcation.instance.getContext()) && TextUtils.isEmpty(cacheControl)) {
+                        request = request.newBuilder()
+                                .cacheControl(CacheControl.FORCE_CACHE)
+                                .build()
+                    }
+                    //如果没有添加注解,则不缓存
+                    if (TextUtils.isEmpty(cacheControl) || "no-store".contains(cacheControl)) {
+                        //响应头设置成无缓存
+                        cacheControl = "no-store"
+                    } else if (NetworkUtils.isNetwork(LetgoApplcation.instance.getContext())) {
+                        //如果有网络,则将缓存的过期事件,设置为0,获取最新数据
+                        cacheControl = "public, max-age=" + 0
+                    } else {
 
                     }
-                })
-                .writeTimeout(10, TimeUnit.SECONDS)
-                .connectTimeout(10, TimeUnit.SECONDS)
-                .readTimeout(10, TimeUnit.SECONDS)
-//                .cookieJar(object : CookieJar {
-//                    private val cookiesStore = HashMap<HttpUrl, List<Cookie>>(16)
-//
-//                    override fun saveFromResponse(url: HttpUrl, cookies: MutableList<Cookie>) {
-//                        HttpUrl.parse(url.host())?.let { cookiesStore.put(it, cookies) }
-//
-//                    }
-//
-//                    override fun loadForRequest(url: HttpUrl): MutableList<Cookie> {
-//
-//                        val cookies = cookiesStore[HttpUrl.parse(url.host())] as MutableList<Cookie>
-//                        return if (cookies != null) cookies else ArrayList()
-//
-//                    }
-//                })
-                .build()
-    }
+                    val response = chain.proceed(request)
+
+                    return@addInterceptor response.newBuilder()
+                            .header("Cache-Control", cacheControl)
+                            .removeHeader("Pragma")
+                            .build()
+
+                }
+                cache(Cache(FileUtils.getInstance().cacheFolder, 1024 * 1024 * 100))
+
+            }.build()
 }

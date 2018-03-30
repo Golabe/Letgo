@@ -1,6 +1,6 @@
 package com.golabe.network.interceptor
 
-import com.golabe.utils.FileUtils
+import com.golabe.common.utils.FileUtils
 import okhttp3.Cache
 import okhttp3.Interceptor
 import okhttp3.Response
